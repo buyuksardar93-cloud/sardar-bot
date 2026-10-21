@@ -1,4 +1,7 @@
 import asyncio
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import (
@@ -11,14 +14,25 @@ from telegram.ext import (
 from groq import Groq
 from duckduckgo_search import DDGS
 
-# سالاھىيەت ئاچقۇچلىرى
+# --- Render ھەقسىز پىلانى تەلەپ قىلغان پورت تەڭشىكى ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is active and running!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
+
+# --- ئاچقۇچلار ---
 TELEGRAM_TOKEN = "8451252167:AAF_W_v1itafY35chUTS1qsWQIYF_TjpkiE"
 GROQ_API_KEY = "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"
 
 client = Groq(api_key=GROQ_API_KEY.strip())
 MODEL_NAME = "openai/gpt-oss-120b"
 
-# ئەقلىي ياردەمچى سالاھىيىتى ۋە يېزىقچىلىق تۈزۈمى
 SYSTEM_PROMPT = (
     "سەن ناھايىتى خۇشپېئىل، كىچىك پېئىل ۋە يۇقىرى بىلىملىك بىر سۈنئىي ئىدراك ياردەمچىسى. "
     "نۆۋەتتىكى ۋاقىت 2026-يىلى 10-ئاي. پۈتكۈل ئىلىم-پەن، تارىخ ۋە توردىكى يېڭى ئۇچۇرلار بىلەن تەمىنلەنگەن.\n\n"
@@ -39,7 +53,6 @@ def get_history(chat_id: int):
     return user_histories[chat_id]
 
 def search_web(query: str, max_results=3):
-    """توردىن يېڭى مەلۇمات ئىزدەش فۇنكسىيەسى"""
     try:
         results = []
         with DDGS() as ddgs:
@@ -66,7 +79,7 @@ async def welcome_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE)
             welcome_text = (
                 f"ئەسسالامۇئەلەيكۇم {user_name}! گۇرۇپپىمىزغا خۇش كەپسىز! 😊🎉\n\n"
                 "مەن بۇ گۇرۇپپىدىكى ئەقلىي ياردەمچى بولىمەن ✨\n"
-                "سوئالىڭىز ياكى بىلىم ئېھتىياجىڭىز بولسا ماڭا يازسىڭىز سىزگە تېز ياردەم بېرەلەيمەن. خۇشال سۆھبەتلەر بولسۇن! 🤝"
+                "سوئالىڭىز بولسا ماڭا يازسىڭىز سىزگە تېز ياردەم بېرەلەيمەن. خۇشال سۆھبەتلەر بولسۇن! 🤝"
             )
             await update.message.reply_text(welcome_text)
 
@@ -119,6 +132,10 @@ async def chat_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"كەچۈرۈڭ، جاۋاب ھازىرلاشتا كاشىلا چىقتى 😔:\n{e}")
 
 def main():
+    # Render نىڭ پورت سىنىقىنى قاندۇرۇش ئۈچۈن قوشۇمچە يىپ ئېچىش
+    server_thread = threading.Thread(target=run_dummy_server, daemon=True)
+    server_thread.start()
+
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -128,7 +145,7 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_with_ai))
     
-    print("سەردارنىڭ 24 سائەتلىك توردىكى ئەقلىي ياردەمچىسى پۈتۈنلەي قوزغالدى!")
+    print("سەردارنىڭ توردىكى 24 سائەتلىك ياردەمچىسى مۇۋەپپەقىيەتلىك ئىشقا كىرىشتى!")
     app.run_polling()
 
 if __name__ == '__main__':
